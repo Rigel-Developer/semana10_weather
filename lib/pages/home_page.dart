@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'dart:convert' as convert;
 import 'package:http/http.dart' as http;
 import 'package:semana10_weather/models/forecast_model.dart';
 import 'package:semana10_weather/models/weather_model.dart';
+import 'package:semana10_weather/services/weather_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,27 +20,24 @@ class _HomePageState extends State<HomePage> {
 
   getData() async {
     // Llamada a la API
-    String apiKey = "f50229e839b54e52b7902327230909";
-    String url =
-        "https://api.weatherapi.com/v1/current.json?key=$apiKey&q=${_controller.text}&aqi=no";
+    ApiService apiServices = ApiService();
 
-    String forecastUrl =
-        "https://api.weatherapi.com/v1/forecast.json?key=$apiKey&q=${_controller.text}&days=7&aqi=no&alerts=no&dt=${DateTime.now().toString().substring(0, 10)}";
-    var weather = await http.get(Uri.parse(url));
-    var forecast = await http.get(Uri.parse(forecastUrl));
+    weatherModel = await apiServices.getWeather(_controller.text);
+    forecastModel = await apiServices.getForecast(_controller.text);
+    // setState(() {});
+  }
 
-    if (weather.statusCode == 200) {
-      // Si la llamada fue exitosa
-      var jsonWeather = convert.jsonDecode(weather.body);
-      var jsonForecast = convert.jsonDecode(forecast.body);
-      forecastModel = ForecastModel.fromJson(jsonForecast);
-      weatherModel = WeatherModel.fromJson(jsonWeather);
+  getDataCurrentLocation() async {
+    Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
 
-      setState(() {});
-    } else {
-      // Si la llamada no fue exitosa
-      print("Request failed with status: ${weather.statusCode}.");
-    }
+    ApiService apiServices = ApiService();
+    weatherModel = await apiServices.getWeatherLocation(
+        position.latitude, position.longitude);
+    forecastModel = await apiServices.getForecastLocation(
+        position.latitude, position.longitude);
+    return forecastModel;
+    // setState(() {});
   }
 
   @override
@@ -109,53 +108,77 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
             const SizedBox(height: 20),
-            SizedBox(
-              width: width * 0.7,
-              child: TextField(
-                controller: _controller,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: "Search another location...",
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.search),
-                    onPressed: () {
-                      getData();
-                    },
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.1),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: width * 0.7,
+                  child: TextField(
+                    controller: _controller,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: "Search another location...",
+                      hintStyle:
+                          TextStyle(color: Colors.white.withOpacity(0.5)),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: () {
+                          getData();
+                        },
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.1),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                IconButton(
+                  onPressed: () {
+                    getDataCurrentLocation();
+                  },
+                  icon: Icon(
+                    Icons.my_location,
+                    color: Colors.white.withOpacity(0.5),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
-            forecastModel != null
-                ? SizedBox(
-                    height: 180,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: forecastModel
-                              ?.forecast?.forecastday?[0].hour?.length ??
-                          0,
-                      itemBuilder: (context, index) {
-                        return ItemWeatherWidget(
-                          time: forecastModel
-                              ?.forecast?.forecastday?[0].hour?[index].time,
-                          tempF: forecastModel
-                              ?.forecast?.forecastday?[0].hour?[index].tempF,
-                        );
-                      },
-                    ),
-                  )
-                : const SizedBox(),
+
+            FutureBuilder(
+                future: getDataCurrentLocation(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    final data = snapshot.data as ForecastModel;
+                    return SizedBox(
+                      height: 150,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount:
+                            data.forecast?.forecastday?[0].hour?.length ?? 0,
+                        itemBuilder: (context, index) {
+                          return ItemWeatherWidget(
+                            time: data
+                                .forecast?.forecastday?[0].hour?[index].time,
+                            tempF: data
+                                .forecast?.forecastday?[0].hour?[index].tempF,
+                          );
+                        },
+                      ),
+                    );
+                  } else {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  }
+                }),
           ],
         ),
       ),
